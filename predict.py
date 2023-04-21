@@ -1,10 +1,9 @@
-import subprocess
 import time
 from collections import OrderedDict
-from typing import Optional
+from typing import Any, List, Optional
 
 import torch
-from cog import BasePredictor, Input, Path, ConcatenateIterator
+from cog import BasePredictor, Input, Path
 from tensorizer import TensorDeserializer
 from tensorizer.utils import no_init_or_tensor
 from transformers import (
@@ -12,16 +11,22 @@ from transformers import (
     AutoTokenizer,
     StoppingCriteria,
     StoppingCriteriaList,
+    pipeline,
+    GPTNeoXForCausalLM,
 )
 
-from subclass import YieldingCausalLM
 
 DEFAULT_MODEL = "stabilityai/stablelm-tuned-alpha-7b"
 CACHE_DIR = "pretrained_weights"
 TOKENIZER_PATH = "./tokenizer"
 
-# TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
-TENSORIZER_WEIGHTS_PATH = "StabilityAI/stablelm-tuned-alpha-7b"
+# To download tensorizer weights instead of load them from a local source, `REMOTE_PATH_TO_TENSORIZER_WEIGHTS` to their URL
+REMOTE_PATH_TO_TENSORIZER_WEIGHTS = None
+PATH_TO_TENSORIZER_WEIGHTS = (
+    REMOTE_PATH_TO_TENSORIZER_WEIGHTS
+    if REMOTE_PATH_TO_TENSORIZER_WEIGHTS
+    else "./tensorized_models/stabilityai/stablelm-tuned-alpha-7b.tensors"
+)
 
 SYSTEM_PROMPT = """<|SYSTEM|># StableLM Tuned (Alpha version)
 - StableLM is a helpful and harmless open-source AI language model developed by StabilityAI.
@@ -42,23 +47,13 @@ class StopOnTokens(StoppingCriteria):
         return False
 
 
-def maybe_download(path):
-    if path.startswith("gs://"):
-        output_path = "/tmp/weights.tensors"
-        subprocess.check_call(["gsutil", "cp", path, output_path])
-        return output_path
-    return path
-
-
 class Predictor(BasePredictor):
     def setup(self, weights: Optional[Path] = None):
         if weights is not None and weights.name == "weights":
             weights = None
-        if weights is None and TENSORIZER_WEIGHTS_PATH:
+        if weights is None and PATH_TO_TENSORIZER_WEIGHTS:
             print("Loading tensorized weights from public path")
-            self.model = self.load_tensorizer(
-                weights=maybe_download(TENSORIZER_WEIGHTS_PATH)
-            )
+            self.model = self.load_tensorizer(weights=PATH_TO_TENSORIZER_WEIGHTS)
 
         elif (hasattr(weights, "filename") and "tensors" in weights.filename) or str(
             weights
@@ -69,11 +64,13 @@ class Predictor(BasePredictor):
 
         self.tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_PATH)
         self.stop = StopOnTokens()
+        self.generator = pipeline('text-generation', model=self.model, tokenizer=self.tokenizer, device=0)
+
 
     def load_huggingface_model(self, weights=None):
         st = time.time()
         print(f"loading weights from {weights} w/o tensorizer")
-        model = YieldingCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to(
+        model = GPTNeoXForCausalLM.from_pretrained(weights, cache_dir=CACHE_DIR).to(
             "cuda:0"
         )
         print(f"weights loaded in {time.time() - st}")
@@ -85,7 +82,7 @@ class Predictor(BasePredictor):
         config = AutoConfig.from_pretrained(DEFAULT_MODEL)
 
         model = no_init_or_tensor(
-            lambda: YieldingCausalLM.from_pretrained(
+            lambda: GPTNeoXForCausalLM.from_pretrained(
                 None, config=config, state_dict=OrderedDict()
             )
         )
@@ -99,7 +96,7 @@ class Predictor(BasePredictor):
         prompt: str = Input(
             description=f"Input Prompt.", default="What's your mood today?"
         ),
-        max_tokens: int = Input(
+        max_new_tokens: int = Input(
             description="Maximum number of tokens to generate. A word is generally 2-3 tokens",
             ge=1,
             default=100,
@@ -122,54 +119,19 @@ class Predictor(BasePredictor):
             le=5,
             default=1.2,
         ),
-    ) -> ConcatenateIterator[str]:
+    ) -> str:
 
         prompt_text = f"{SYSTEM_PROMPT}<|USER|>{prompt}<|ASSISTANT|>"
 
-        input_ids = self.tokenizer(prompt_text, return_tensors="pt").input_ids.to(
-            "cuda:0"
+        result = self.generator(
+            prompt_text,
+            max_new_tokens=max_new_tokens,
+            num_return_sequences=1,
+            num_beams=1,
+            do_sample=True,
+            temperature=temperature,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            stopping_criteria=StoppingCriteriaList([self.stop]),
         )
-        with torch.inference_mode():
-            first_token_yielded = False
-            prev_ids = []
-            for output in self.model.generate(
-                input_ids,
-                max_new_tokens=max_tokens,
-                do_sample=True,
-                num_return_sequences=1,
-                num_beams=1,
-                temperature=temperature,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                stopping_criteria=StoppingCriteriaList([self.stop]),
-            ):
-                cur_id = output.item()
-                # in order to properly handle spaces, we need to do our own tokenizing. Fun!
-                # we're building up a buffer of sub-word / punctuation tokens until we hit a space, and then yielding whole words + punctuation.
-                cur_token = self.tokenizer.convert_ids_to_tokens(cur_id)
-
-                # skip initial newline, which this almost always yields. hack - newline id = 187.
-                if not first_token_yielded and not prev_ids and cur_id == 187:
-                    continue
-
-                # Space is represented as "Ġ".
-                # Yield previous IDs if we hit a space
-                # or if the current token includes a space
-                # at its start (e.g. ' is' -> 'Ġis')
-                if cur_token.startswith("Ġ"):
-                    if prev_ids:
-                        yield self.tokenizer.decode(prev_ids)
-                        prev_ids = []
-
-                    prev_ids = [cur_id]
-                    continue
-
-                # End token
-                if cur_token == "<|endoftext|>":
-                    break
-
-                prev_ids.append(cur_id)
-
-            if prev_ids:
-                yield self.tokenizer.decode(prev_ids)
-                prev_ids = []
+        return result[0]["generated_text"].replace(prompt_text, "")

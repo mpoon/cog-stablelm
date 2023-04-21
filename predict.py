@@ -44,7 +44,7 @@ class StopOnTokens(StoppingCriteria):
 def maybe_download(path):
     if path.startswith("gs://"):
         output_path = "/tmp/weights.tensors"
-        subprocess.check_call(["gcloud", "storage", "cp", path, output_path])
+        subprocess.check_call(["gsutil", "cp", path, output_path])
         return output_path
     return path
 

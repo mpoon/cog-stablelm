@@ -20,7 +20,8 @@ DEFAULT_MODEL = "stabilityai/stablelm-tuned-alpha-7b"
 CACHE_DIR = "pretrained_weights"
 TOKENIZER_PATH = "./tokenizer"
 
-TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
+# TENSORIZER_WEIGHTS_PATH = "gs://replicate-weights/stablelm-tuned-alpha-7b.tensors"
+TENSORIZER_WEIGHTS_PATH = "StabilityAI/stablelm-tuned-alpha-7b"
 
 SYSTEM_PROMPT = """<|SYSTEM|># StableLM Tuned (Alpha version)
 - StableLM is a helpful and harmless open-source AI language model developed by StabilityAI.

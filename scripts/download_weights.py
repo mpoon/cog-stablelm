@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
 
-MODEL_REPO = "stabilityai/stablelm-tuned-alpha-7b"
+MODEL_REPO = "stabilityai/stablelm-tuned-alpha-3b"
 LOCAL_MODEL_DIR = "./pretrained_weights"
 LOCAL_TOKENIZER_DIR = "./tokenizer"
 

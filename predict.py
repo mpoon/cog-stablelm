@@ -16,7 +16,7 @@ from transformers import (
 )
 
 
-DEFAULT_MODEL = "stabilityai/stablelm-tuned-alpha-7b"
+DEFAULT_MODEL = "stabilityai/stablelm-tuned-alpha-3b"
 CACHE_DIR = "pretrained_weights"
 TOKENIZER_PATH = "./tokenizer"
 
@@ -25,7 +25,7 @@ REMOTE_PATH_TO_TENSORIZER_WEIGHTS = None
 PATH_TO_TENSORIZER_WEIGHTS = (
     REMOTE_PATH_TO_TENSORIZER_WEIGHTS
     if REMOTE_PATH_TO_TENSORIZER_WEIGHTS
-    else "./tensorized_models/stabilityai/stablelm-tuned-alpha-7b.tensors"
+    else "./tensorized_models/stabilityai/stablelm-tuned-alpha-3b.tensors"
 )
 
 SYSTEM_PROMPT = """<|SYSTEM|># StableLM Tuned (Alpha version)

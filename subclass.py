@@ -17,10 +17,10 @@ from transformers.generation.utils import (
     SampleEncoderDecoderOutput,
 )
 
-from transformers import GPTNeoXForCausalLM
+from transformers import AutoModelForCausalLM
 
 
-class YieldingCausalLM(GPTNeoXForCausalLM):
+class YieldingCausalLM(AutoModelForCausalLM):
     """Overriding sample to yield tokens"""
 
     def sample(

@@ -1,2 +1,4 @@
 .cog
 __pycache__
+pretrained_weights/**
+tensorized_models/**

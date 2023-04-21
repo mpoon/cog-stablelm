@@ -92,3 +92,15 @@ To use your model in the browser, go to your model page.
 To use your model with an API, click on the "API" tab on your model page. You'll see commands to run the model with cURL, Python, etc.
 
 To learn more about how to use Replicate, [check out our documentation](https://replicate.com/docs).
+
+## Build
+
+```
+cog build -t stablelm-tuned-3b
+```
+
+## Run
+
+```
+docker run -d -p 80:5000 --gpus all stablelm-tuned-3b
+```
